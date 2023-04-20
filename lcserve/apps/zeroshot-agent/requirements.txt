@@ -2,3 +2,4 @@ openai
 google-search-results
 wikipedia
 wolframalpha
+pyowm
