@@ -19,8 +19,12 @@ from jina import Flow
 
 APP_NAME = 'langchain'
 BABYAGI_APP_NAME = 'babyagi'
+PDF_QNA_APP_NAME = 'pdfqna'
+DEFAULT_TIMEOUT = 120
 ServingGatewayConfigFile = 'servinggateway_config.yml'
 JCloudConfigFile = 'jcloud_config.yml'
+# TODO: this needs to be pulled from Jina Wolf API dynamically after the issue has been fixed on the API side
+APP_LOGS_URL = 'https://dashboard.wolf.jina.ai/d/flow/flow-monitor?var-flow={flow}&var-datasource=thanos&orgId=2&from=now-24h&to=now&viewPanel=85'
 
 
 def syncify(f):
@@ -167,6 +171,8 @@ def push_app_to_hubble(
     mod: str,
     tag: str = 'latest',
     requirements: Tuple[str] = None,
+    version: str = 'latest',
+    platform: str = None,
     verbose: Optional[bool] = False,
 ) -> Tuple[str, bool]:
     from hubble.executor.hubio import HubIO
@@ -214,10 +220,20 @@ def push_app_to_hubble(
         with open(os.path.join(tmpdir, 'requirements.txt'), 'w') as f:
             f.write('\n'.join(requirements))
 
+    # Remove langchain-serve itself from the requirements list as it may be entered by mistake and break things
+    if os.path.exists(os.path.join(tmpdir, 'requirements.txt')):
+        with open(os.path.join(tmpdir, 'requirements.txt'), 'r') as f:
+            requirements = f.read().splitlines()
+
+        requirements = [r for r in requirements if not r.startswith("langchain-serve")]
+
+        with open(os.path.join(tmpdir, 'requirements.txt'), 'w') as f:
+            f.write('\n'.join(requirements))
+
     # Create the Dockerfile
     with open(os.path.join(tmpdir, 'Dockerfile'), 'w') as f:
         dockerfile = [
-            'FROM jinawolf/serving-gateway:latest',
+            f'FROM jinawolf/serving-gateway:{version}',
             'COPY . /appdir/',
             'RUN if [ -e /appdir/requirements.txt ]; then pip install -r /appdir/requirements.txt; fi',
             'ENTRYPOINT [ "jina", "gateway", "--uses", "config.yml" ]',
@@ -251,6 +267,9 @@ def push_app_to_hubble(
 
     args = set_hub_push_parser().parse_args(args_list)
 
+    if platform:
+        args.platform = platform
+
     if hubble_exists(name):
         args.force_update = name
 
@@ -263,6 +282,7 @@ class Defaults:
     autoscale_min: int = 0
     autoscale_max: int = 10
     autoscale_rps: int = 10
+    autoscale_stable_window: int = DEFAULT_TIMEOUT
 
     def __post_init__(self):
         # read from config yaml
@@ -277,6 +297,9 @@ class Defaults:
             )
             self.autoscale_rps = config.get('autoscale', {}).get(
                 'rps', self.autoscale_rps
+            )
+            self.autoscale_stable_window = config.get('autoscale', {}).get(
+                'stable_window', self.autoscale_stable_window
             )
 
 
@@ -331,6 +354,7 @@ class AutoscaleConfig:
     min: int = Defaults.autoscale_min
     max: int = Defaults.autoscale_max
     rps: int = Defaults.autoscale_rps
+    stable_window: int = Defaults.autoscale_stable_window
 
     def to_dict(self) -> Dict:
         return {
@@ -339,6 +363,7 @@ class AutoscaleConfig:
                 'max': self.max,
                 'metric': 'rps',
                 'target': self.rps,
+                'stable_window': self.stable_window,
             }
         }
 
@@ -363,14 +388,15 @@ def get_with_args_for_jcloud() -> Dict:
 
 def get_gateway_jcloud_args(
     instance: str = Defaults.instance,
-    autoscale: AutoscaleConfig = AutoscaleConfig(),
     websocket: bool = False,
+    timeout: int = DEFAULT_TIMEOUT,
 ) -> Dict:
-    _autoscale_args = autoscale.to_dict() if autoscale else {}
-    if (
-        websocket
-    ):  # # TODO: remove this when websocket + autoscale is supported in JCloud
-        _autoscale_args = {}
+
+    _autoscale = AutoscaleConfig(stable_window=timeout)
+
+    # TODO: remove this when websocket + autoscale is supported in JCloud
+    _timeout = 600 if websocket else timeout
+    _autoscale_args = {} if websocket else _autoscale.to_dict()
 
     return {
         'jcloud': {
@@ -380,6 +406,7 @@ def get_gateway_jcloud_args(
                 'capacity': 'spot',
             },
             'healthcheck': False if websocket else True,
+            'timeout': _timeout,
             **_autoscale_args,
         }
     }
@@ -390,6 +417,7 @@ def get_flow_dict(
     jcloud: bool = False,
     port: int = 8080,
     name: str = APP_NAME,
+    timeout: int = DEFAULT_TIMEOUT,
     app_id: str = None,
     gateway_id: str = None,
     websocket: bool = False,
@@ -409,7 +437,11 @@ def get_flow_dict(
             'port': [port],
             'protocol': ['websocket'] if websocket else ['http'],
             **get_uvicorn_args(),
-            **(get_gateway_jcloud_args(websocket=websocket) if jcloud else {}),
+            **(
+                get_gateway_jcloud_args(timeout=timeout, websocket=websocket)
+                if jcloud
+                else {}
+            ),
         },
         **(get_global_jcloud_args(app_id=app_id, name=name) if jcloud else {}),
     }
@@ -505,9 +537,12 @@ async def get_app_status_on_jcloud(app_id: str):
 
         status: Dict = app_status['status']
         endpoint = _get_endpoint(status)
-        _add_row('AppID', app_id, bold_key=True, bold_value=True)
+        flow_namespace = app_id.split("-")[-1]
+
+        _add_row('App ID', app_id, bold_key=True, bold_value=True)
         _add_row('Phase', status.get('phase', ''))
         _add_row('Endpoint', endpoint)
+        _add_row('App logs', APP_LOGS_URL.format(flow=flow_namespace))
         _add_row('Swagger UI', _replace_wss_with_https(f'{endpoint}/docs'))
         _add_row('OpenAPI JSON', _replace_wss_with_https(f'{endpoint}/openapi.json'))
         console.print(_t)

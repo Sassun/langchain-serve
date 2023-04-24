@@ -6,9 +6,12 @@ import click
 from jcloud.constants import Phase
 from jina import Flow
 
+from . import __version__
 from .flow import (
     APP_NAME,
     BABYAGI_APP_NAME,
+    PDF_QNA_APP_NAME,
+    DEFAULT_TIMEOUT,
     deploy_app_on_jcloud,
     get_app_status_on_jcloud,
     get_flow_dict,
@@ -33,6 +36,9 @@ async def serve_on_jcloud(
     name: str = APP_NAME,
     requirements: List[str] = None,
     app_id: str = None,
+    version: str = 'latest',
+    timeout: int = DEFAULT_TIMEOUT,
+    platform: str = None,
     verbose: bool = False,
 ):
     from .backend.playground.utils.helper import get_random_tag
@@ -42,6 +48,8 @@ async def serve_on_jcloud(
         module,
         requirements=requirements,
         tag=tag,
+        version=version,
+        platform=platform,
         verbose=verbose,
     )
     app_id, endpoint = await deploy_app_on_jcloud(
@@ -50,6 +58,7 @@ async def serve_on_jcloud(
             jcloud=True,
             port=8080,
             name=name,
+            timeout=timeout,
             app_id=app_id,
             gateway_id=gateway_id_wo_tag + ':' + tag,
             websocket=is_websocket,
@@ -64,6 +73,9 @@ async def serve_babyagi_on_jcloud(
     name: str = BABYAGI_APP_NAME,
     requirements: List[str] = None,
     app_id: str = None,
+    version: str = 'latest',
+    timeout: int = DEFAULT_TIMEOUT,
+    platform: str = None,
     verbose: bool = False,
 ):
     await serve_on_jcloud(
@@ -71,11 +83,34 @@ async def serve_babyagi_on_jcloud(
         name=name,
         requirements=requirements,
         app_id=app_id,
+        version=version,
+        timeout=timeout,
+        platform=platform,
+        verbose=verbose,
+    )
+
+
+async def serve_pdf_qna_on_jcloud(
+    name: str = PDF_QNA_APP_NAME,
+    app_id: str = None,
+    version: str = 'latest',
+    timeout: int = DEFAULT_TIMEOUT,
+    platform: str = None,
+    verbose: bool = False,
+):
+    await serve_on_jcloud(
+        module='lcserve.apps.pdf_qna.app',
+        name=name,
+        app_id=app_id,
+        version=version,
+        timeout=timeout,
+        platform=platform,
         verbose=verbose,
     )
 
 
 @click.group()
+@click.version_option(__version__, '-v', '--version', prog_name='lc-serve')
 @click.help_option('-h', '--help')
 def serve():
     pass
@@ -125,6 +160,27 @@ def local(module, port):
     show_default=True,
 )
 @click.option(
+    '--version',
+    type=str,
+    default='latest',
+    help='Version of serving gateway to be used.',
+    show_default=False,
+)
+@click.option(
+    '--timeout',
+    type=int,
+    default=DEFAULT_TIMEOUT,
+    help='Total request timeout in seconds.',
+    show_default=True,
+)
+@click.option(
+    '--platform',
+    type=str,
+    default=None,
+    help='Platform of Docker image needed for the deployment is built on.',
+    show_default=False,
+)
+@click.option(
     '--verbose',
     is_flag=True,
     help='Verbose mode.',
@@ -132,8 +188,16 @@ def local(module, port):
 )
 @click.help_option('-h', '--help')
 @syncify
-async def jcloud(module, name, app_id, verbose):
-    await serve_on_jcloud(module, name=name, app_id=app_id, verbose=verbose)
+async def jcloud(module, name, app_id, version, timeout, platform, verbose):
+    await serve_on_jcloud(
+        module,
+        name=name,
+        app_id=app_id,
+        version=version,
+        timeout=timeout,
+        platform=platform,
+        verbose=verbose,
+    )
 
 
 @deploy.command(help='Deploy babyagi on JCloud.')
@@ -158,6 +222,27 @@ async def jcloud(module, name, app_id, verbose):
     show_default=True,
 )
 @click.option(
+    '--version',
+    type=str,
+    default='latest',
+    help='Version of serving gateway to be used.',
+    show_default=False,
+)
+@click.option(
+    '--timeout',
+    type=int,
+    default=DEFAULT_TIMEOUT,
+    help='Total request timeout in seconds.',
+    show_default=True,
+)
+@click.option(
+    '--platform',
+    type=str,
+    default=None,
+    help='Platform of Docker image needed for the deployment is built on.',
+    show_default=False,
+)
+@click.option(
     '--verbose',
     is_flag=True,
     help='Verbose mode.',
@@ -165,12 +250,63 @@ async def jcloud(module, name, app_id, verbose):
 )
 @click.help_option('-h', '--help')
 @syncify
-async def babyagi(name, requirements, app_id, verbose):
+async def babyagi(name, requirements, app_id, version, timeout, platform, verbose):
     await serve_babyagi_on_jcloud(
         name=name,
         requirements=requirements,
         app_id=app_id,
+        version=version,
+        timeout=timeout,
+        platform=platform,
         verbose=verbose,
+    )
+
+
+@deploy.command(help='Deploy pdf qna on JCloud.')
+@click.option(
+    '--name',
+    type=str,
+    default=PDF_QNA_APP_NAME,
+    help='Name of the app.',
+    show_default=True,
+)
+@click.option(
+    '--app-id',
+    type=str,
+    default=None,
+    help='AppID of the deployed agent to be updated.',
+    show_default=True,
+)
+@click.option(
+    '--version',
+    type=str,
+    default='latest',
+    help='Version of serving gateway to be used.',
+    show_default=False,
+)
+@click.option(
+    '--timeout',
+    type=int,
+    default=DEFAULT_TIMEOUT,
+    help='Total request timeout in seconds.',
+    show_default=True,
+)
+@click.option(
+    '--platform',
+    type=str,
+    default=None,
+    help='Platform of Docker image needed for the deployment is built on.',
+    show_default=False,
+)
+@click.help_option('-h', '--help')
+@syncify
+async def pdf_qna(name, app_id, version, timeout, platform):
+    await serve_pdf_qna_on_jcloud(
+        name=name,
+        app_id=app_id,
+        version=version,
+        timeout=timeout,
+        platform=platform,
     )
 
 

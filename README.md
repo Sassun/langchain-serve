@@ -1,13 +1,22 @@
-# LangChain Apps on Production with Jina 🚀
+<p align="center">
+<h2 align="center">LangChain Apps on Production with Jina 🚀</h2>
+</p>
+
+<p align=center>
+<a href="https://pypi.org/project/langchain-serve/"><img alt="PyPI" src="https://img.shields.io/pypi/v/langchain-serve?label=Release&style=flat-square"></a>
+<a href="https://jina.ai/slack"><img src="https://img.shields.io/badge/Slack-3.6k-blueviolet?logo=slack&amp;logoColor=white&style=flat-square"></a>
+<a href="https://pypistats.org/packages/langchain-serve"><img alt="PyPI - Downloads from official pypistats" src="https://img.shields.io/pypi/dm/langchain-serve?style=flat-square"></a>
+<a href="https://github.com/jina-ai/langchain-serve/actions/workflows/cd.yml"><img alt="Github CD status" src="https://github.com/jina-ai/langchain-serve/actions/workflows/cd.yml/badge.svg"></a>
+</p>
+
 
 [Jina](https://github.com/jina-ai/jina) is an open-source framework to build, deploy & manage machine learning applications at scale. [LangChain](https://python.langchain.com/en/latest/index.html) is another open-source framework for building applications powered by language models. 
 
 **langchain-serve** helps you deploy your LangChain apps on Jina AI Cloud in just a matter of seconds. You can now benefit from the scalability and serverless architecture of the cloud without sacrificing the ease and convenience of local development.
 
+> Give us a :star: and tell us what more you'd like to see! 
 
 ## 🧠 Babyagi-as-a-service
-
-> Give us a :star: and tell us what more you'd like to see! 
 
 - Deploy `babyagi` on Jina AI Cloud with one command
 
@@ -21,8 +30,35 @@
   lc-serve playground babyagi
   ```
 
-![Babyagi-as-a-service Playground](.github/images/babyagi-playground.gif)
+  <details>
+  <summary>Show playground</summary>
+  <img src=".github/images/babyagi-playground.gif" title="Babyagi-as-a-service Playground">
+  </details>
 
+
+## 💬 Question Answer Bot on PDFs
+
+- Deploy `pdf_qna` on Jina AI Cloud with one command
+
+  ```bash
+  lc-serve deploy pdf_qna
+  ```
+
+- Get a flavor of the integration with Streamlit playground on your CLI with 
+    
+  ```bash
+  lc-serve playground pdf_qna
+  ```
+  <details>
+  <summary>Show playground</summary>
+  <img src=".github/images/pdf_qna_demo.gif" title="pdf_qna Playground">
+  </details>
+
+- Expand the Q&A bot to multiple languages, different document types & integrate with external services using simple REST APIs.
+
+  https://github.com/jina-ai/langchain-serve/blob/8f7a9272e99490a5357655becfc5da3569655f38/lcserve/apps/pdf_qna/app.py#L8-L12
+
+# :muscle: Features
 
 #### 🎉 Custom Apps to production in 4 simple steps
 
@@ -524,3 +560,15 @@ curl -sX POST 'https://langchain.wolf.jina.ai/api/run' \
 | [Sequential Chains](examples/sequential_executors.md) | N/A | Build & scale `Chains` in separate `Executor`s |
 | [Branching Chains](examples/branching.md) | N/A | Branching `Chains` in separate `Executor`s to allow parallel execution |
 
+## Frequently Asked Questions
+
+- [My client that connects to the App gets timed-out, what should I do?](#my-client-that-connects-to-the-app-gets-timed-out-what-should-I-do)
+- [JCloud deployment failed at pushing image to Jina Hubble, what should I do?](#jcloud-deployment-failed-at-pushing-image-to-jina-hubble-what-should-i-di)
+
+### My client that connects to the App gets timed-out, what should I do?
+
+If you make long HTTP requests, you may experience timeouts due to limitations in the OSS we used in `langchain-serve`. While we are working to permanently address this issue, we recommend using HTTP/1.1 in your client as a temporary workaround.
+
+### JCloud deployment failed at pushing image to Jina Hubble, what should I do?
+
+Please use `--verbose` and retry to get more information. If you are operating on computer with `arm64` arch, please retry with `--platform linux/amd64` so the image can be built correctly.
