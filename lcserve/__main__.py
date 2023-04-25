@@ -375,5 +375,24 @@ def babyagi(verbose):
     play(verbose=verbose)
 
 
+@playground.command(help='Play with pdf qna on JCloud.')
+def pdf_qna():
+    try:
+        from streamlit.web import cli as strcli
+    except ImportError:
+        raise ImportError(
+            "Streamlit is not installed. Please install it with `pip install streamlit`."
+        )
+
+    sys.argv = [
+        'streamlit',
+        'run',
+        os.path.join(
+            os.path.dirname(__file__), 'playground', 'pdf_qna', 'playground.py'
+        ),
+    ]
+    sys.exit(strcli.main())
+
+
 if __name__ == "__main__":
     serve()
