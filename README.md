@@ -1,16 +1,16 @@
 <p align="center">
-<h2 align="center">LangChain Apps on Production with Jina 🚀</h2>
+<h2 align="center">⚡ LangChain Apps on Production with Jina & FastAPI 🚀</h2>
 </p>
 
 <p align=center>
 <a href="https://pypi.org/project/langchain-serve/"><img alt="PyPI" src="https://img.shields.io/pypi/v/langchain-serve?label=Release&style=flat-square"></a>
-<a href="https://jina.ai/slack"><img src="https://img.shields.io/badge/Slack-3.6k-blueviolet?logo=slack&amp;logoColor=white&style=flat-square"></a>
+<a href="https://jina.ai/slack"><img src="https://img.shields.io/badge/Slack-4.8k-blueviolet?logo=slack&amp;logoColor=white&style=flat-square"></a>
 <a href="https://pypistats.org/packages/langchain-serve"><img alt="PyPI - Downloads from official pypistats" src="https://img.shields.io/pypi/dm/langchain-serve?style=flat-square"></a>
 <a href="https://github.com/jina-ai/langchain-serve/actions/workflows/cd.yml"><img alt="Github CD status" src="https://github.com/jina-ai/langchain-serve/actions/workflows/cd.yml/badge.svg"></a>
 </p>
 
 
-[Jina](https://github.com/jina-ai/jina) is an open-source framework to build, deploy & manage machine learning applications at scale. [LangChain](https://python.langchain.com/en/latest/index.html) is another open-source framework for building applications powered by language models. 
+[Jina](https://github.com/jina-ai/jina) is an open-source framework for building scalable multi modal AI apps on Production. [LangChain](https://python.langchain.com/en/latest/index.html) is another open-source framework for building applications powered by LLMs.
 
 **langchain-serve** helps you deploy your LangChain apps on Jina AI Cloud in just a matter of seconds. You can now benefit from the scalability and serverless architecture of the cloud without sacrificing the ease and convenience of local development.
 
@@ -33,6 +33,64 @@
   <details>
   <summary>Show playground</summary>
   <img src=".github/images/babyagi-playground.gif" title="Babyagi-as-a-service Playground">
+  </details>
+
+
+## :panda_face: pandas-ai-as-a-service
+
+[pandas-ai](https://github.com/gventuri/pandas-ai) integrates LLM capabilities into Pandas, to make daraframes conversational in Python code. Thanks to langchain-serve, we can now expose pandas-ai APIs on Jina AI Cloud in just a matter of seconds.
+
+- Deploy **pandas-ai** on Jina AI Cloud
+
+  ```bash
+  lc-serve deploy pandas-ai
+  ```
+
+  <details>
+  <summary>Show command output</summary>
+
+  ```text
+  ╭──────────────┬─────────────────────────────────────────────────────────────────────────────────╮
+  │ App ID       │                               pandasai-06879349ca                               │
+  ├──────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+  │ Phase        │                                     Serving                                     │
+  ├──────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+  │ Endpoint     │                     wss://pandasai-06879349ca.wolf.jina.ai                      │
+  ├──────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+  │ App logs     │                             dashboards.wolf.jina.ai                             │
+  ├──────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+  │ Swagger UI   │                  https://pandasai-06879349ca.wolf.jina.ai/docs                  │
+  ├──────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+  │ OpenAPI JSON │              https://pandasai-06879349ca.wolf.jina.ai/openapi.json              │
+  ╰──────────────┴─────────────────────────────────────────────────────────────────────────────────╯
+  ```
+
+  </details>
+
+- Upload your DataFrame to Jina AI Cloud (Optional - you can also use a publicly available CSV)
+
+  - Define your DataFrame in a Python file
+    
+    ```python
+    # dataframe.py
+    import pandas as pd
+    df = pd.DataFrame(some_data)
+    ```
+
+  - Upload your DataFrame to Jina AI Cloud using `<module>:<variable>` syntax
+    
+    ```bash
+    lc-serve util upload-df dataframe:df
+    ```
+
+- Conversationalize your DataFrame using pandas-ai APIs. Get a flavor of the integration with a local playground on your CLI with 
+  
+  ```bash
+  lc-serve playground pandas-ai
+  ```
+  <details>
+  <summary>Show playground</summary>
+  <img src=".github/images/pandas-ai-playground.gif" title="pandas-ai-as-a-service Playground">
   </details>
 
 
@@ -68,11 +126,12 @@
   1. Run `lc-serve deploy jcloud app` to deploy on [Jina AI Cloud](https://jina.ai/product/cloud/).
 
 
-#### 🔥 Scalable, Serverless RESTful/Streaming Websocket APIs on Jina AI Cloud
+#### 🔥 Secure, Scalable, Serverless, Streaming RESTful/Websocket APIs on Jina AI Cloud
 
   - 🌎 RESTful/Websocket APIs with TLS certs in just 2 lines of code change.
   - 🌊 Stream LLM interactions in real-time with Websockets.
   - 👥 Enable human in the loop for your agents.
+  - 🔑 [Authorize API endpoints](#-authorize-your-apis) using Bearer tokens.
   - 📄 Swagger UI, and OpenAPI spec included with your APIs.
   - ⚡️ Serverless apps that scales automatically with your traffic.
   - 📊 Builtin logging, monitoring, and traces for your APIs.
@@ -81,7 +140,6 @@
 
 #### 🚧 Coming soon
 
-- [ ] 🔑 Authorize API endpoints
 - [ ] 🛠️ Enable Streamlit playground deployment for your apps
 
 
@@ -417,6 +475,46 @@ curl -X 'POST' \
 - Now, other agents can integrate with your agents on Jina AI Cloud thanks to the [OpenAPI Agent](https://python.langchain.com/en/latest/modules/agents/toolkits/examples/openapi.html) 💡
 
 
+---
+
+### 🔐 Authorize your APIs
+
+To add an extra layer of security, we can integrate any custom API authorization by adding a `auth` argument to the `serving` decorator. 
+
+```python
+from lcserve import serving
+
+def authorizer(token: str) -> Any:
+    if not token == 'mysecrettoken':            # Change this to add your own authorization logic
+        raise Exception('Unauthorized')         # Raise an exception if the request is not authorized
+
+    return 'userid'                             # Return any user id or object
+
+@serving(auth=authorizer)
+def ask(question: str, **kwargs) -> str:
+    auth_response = kwargs['auth_response']     # This will be 'userid'
+    return ...
+
+@serving(websocket=True, auth=authorizer)
+async def talk(question: str, **kwargs) -> str:
+    auth_response = kwargs['auth_response']     # This will be 'userid'
+    return ...
+```
+
+##### 🤔 Gotchas about the `auth` function
+
+- Should accept only one argument `token`.
+- Should raise an Exception if the request is not authorized.
+- Can return any object, which will be passed to the `auth_response` object under `kwargs` to the functions.
+- Expects Bearer token in the `Authorization` header of the request.
+- Sample HTTP request with `curl`:
+  ```bash
+  curl -X 'POST' 'http://localhost:8080/ask' -H 'Authorization: Bearer mysecrettoken' -d '{ "question": "...", "envs": {} }'
+  ```
+- Sample WebSocket request with `wscat`:
+  ```bash
+  wscat -H "Authorization: Bearer mysecrettoken" -c ws://localhost:8080/talk
+  ```
 
 ---
 
@@ -425,7 +523,6 @@ curl -X 'POST' \
 - Serverless is not your thing?
 - Do you want larger instances for your API?
 - Looking for file uploads, or other data-in, data-out features?
-- Do you want to setup custom authorization for your API?
 
 
 📣 Got your attention? [Join us on Slack](https://jina.ai/slack/) and we'd be happy to help you out.
@@ -433,9 +530,9 @@ curl -X 'POST' \
 ---
 
 
-### `lc-serve`
+### `lc-serve` CLI
 
-`lc-serve` is a CLI tool that helps you to deploy your agents on Jina AI Cloud.
+`lc-serve` is a simple CLI that helps you to deploy your agents on Jina AI Cloud.
 
 
 | Description | Command | 
@@ -446,7 +543,6 @@ curl -X 'POST' \
 | Get app status on Jina AI Cloud | `lc-serve status <app-id>` |
 | List all apps on Jina AI Cloud | `lc-serve list` |
 | Remove app on Jina AI Cloud | `lc-serve remove <app-id>` |
-
 
 ---
 
@@ -538,27 +634,6 @@ curl -sX POST 'https://langchain.wolf.jina.ai/api/run' \
 ```
 
 ---
-
-## Chains on Jina 📦🚀
-
-[Chains](https://python.langchain.com/en/latest/modules/chains/getting_started.html) in LangChain allow users to combine components to create a single, coherent application. With Jina, 
-
-- You can expose your `Chain` as RESTful/gRPC/WebSocket API.
-- Enable `Chain`s to deploy & scale separately from the rest of your application with the help of Executors.
-- Deploy your `Chain` on Jina AI Cloud and get exclusive access to Agents on Jina AI Cloud (coming soon)
-
-### Examples
-
-| Example | LangChain Docs | Description |
-| ------- | ----------- | ----------- |
-| [LLM Chain](examples/llm_chain.md) | [Link](https://langchain.readthedocs.io/en/latest/modules/chains/getting_started.html#query-an-llm-with-the-llmchain) | Expose `Chain` as RESTful/gRPC/WebSocket API locally |
-| [Simple Sequential Chain](examples/simple_sequential_chain.md) | [Link](https://langchain.readthedocs.io/en/latest/modules/chains/generic/sequential_chains.html#simplesequentialchain) | Expose `Chain` as RESTful/gRPC/WebSocket API locally |
-| [Sequential Chain](examples/sequential_chain.md) | [Link](https://langchain.readthedocs.io/en/latest/modules/chains/generic/sequential_chains.html#sequential-chain) | Expose `Chain` as RESTful/gRPC/WebSocket API locally |
-| [LLM Math Chain](examples/llm_math.md) | [Link](https://langchain.readthedocs.io/en/latest/modules/chains/examples/llm_math.html) | Expose `Chain` as RESTful/gRPC/WebSocket API locally |
-| [LLM Requests Chain](examples/llm_requests_chain.md) | [Link](https://langchain.readthedocs.io/en/latest/modules/chains/examples/llm_requests.html) | Expose `Chain` as RESTful/gRPC/WebSocket API locally |
-| [Custom Chain](examples/custom_chain.md) | [Link](https://langchain.readthedocs.io/en/latest/modules/chains/getting_started.html#create-a-custom-chain-with-the-chain-class) | Expose `Chain` as RESTful/gRPC/WebSocket API locally |
-| [Sequential Chains](examples/sequential_executors.md) | N/A | Build & scale `Chains` in separate `Executor`s |
-| [Branching Chains](examples/branching.md) | N/A | Branching `Chains` in separate `Executor`s to allow parallel execution |
 
 ## Frequently Asked Questions
 

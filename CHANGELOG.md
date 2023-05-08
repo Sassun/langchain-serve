@@ -17,6 +17,12 @@
 
 
 
+
+
+
+
+
+
 <a name=release-note-0-0-1></a>
 ## Release Note (`0.0.1`)
 
@@ -420,4 +426,151 @@
 ### 🍹 Other Improvements
 
  - [[```1a96ae21```](https://github.com/jina-ai/langchain-serve/commit/1a96ae21df3e26df441866953e648023e5cbdf5b)] __-__ __version__: the next version will be 0.0.17 (*Jina Dev Bot*)
+
+<a name=release-note-0-0-18></a>
+## Release Note (`0.0.18`)
+
+> Release time: 2023-04-28 12:51:53
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Deepankar Mahapatro,  Zac Li,  Jina Dev Bot,  🙇
+
+
+### 🆕 New Features
+
+ - [[```6360bb6a```](https://github.com/jina-ai/langchain-serve/commit/6360bb6a53f75d567f499e6fe0469427da5fe5e6)] __-__ bearer token authorization (*Deepankar Mahapatro*)
+
+### 🐞 Bug fixes
+
+ - [[```c635746a```](https://github.com/jina-ai/langchain-serve/commit/c635746aef5e735c2f3ca22574c490ea02ef591d)] __-__ update hyperlink title (*Zac Li*)
+ - [[```a3cdf7f7```](https://github.com/jina-ai/langchain-serve/commit/a3cdf7f78c6abe928f3814dcff17abc3e1a110a1)] __-__ use hyperlink in app table (*Zac Li*)
+
+### 🍹 Other Improvements
+
+ - [[```44642756```](https://github.com/jina-ai/langchain-serve/commit/44642756f7e84f4478ae98fdb7dc9d5a25c14b3f)] __-__ __version__: the next version will be 0.0.18 (*Jina Dev Bot*)
+ - [[```1a96ae21```](https://github.com/jina-ai/langchain-serve/commit/1a96ae21df3e26df441866953e648023e5cbdf5b)] __-__ __version__: the next version will be 0.0.17 (*Jina Dev Bot*)
+ - [[```0d8ed473```](https://github.com/jina-ai/langchain-serve/commit/0d8ed473c99c8df72b704534a4488fe59478b570)] __-__ Merge pull request #41 from jina-ai/fix-40 (*Deepankar Mahapatro*)
+
+<a name=release-note-0-0-19></a>
+## Release Note (`0.0.19`)
+
+> Release time: 2023-05-01 15:53:36
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Deepankar Mahapatro,  Jina Dev Bot,  🙇
+
+
+### 🆕 New Features
+
+ - [[```9400c9aa```](https://github.com/jina-ai/langchain-serve/commit/9400c9aad9117116fbbf1ec8d941d34be8614381)] __-__ support file upload (*Deepankar Mahapatro*)
+
+### 📗 Documentation
+
+ - [[```833c9dd9```](https://github.com/jina-ai/langchain-serve/commit/833c9dd98ecf4fc438f48f8536a9fcdcd4c5b5ae)] __-__ update readme (*Deepankar Mahapatro*)
+
+### 🍹 Other Improvements
+
+ - [[```9cc9a0eb```](https://github.com/jina-ai/langchain-serve/commit/9cc9a0ebadf81c967fb4e25ce7c85e92ecbc3dff)] __-__ __version__: the next version will be 0.0.19 (*Jina Dev Bot*)
+
+<a name=release-note-0-0-20></a>
+## Release Note (`0.0.20`)
+
+> Release time: 2023-05-02 10:02:04
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Deepankar Mahapatro,  Jina Dev Bot,  🙇
+
+
+### 🐞 Bug fixes
+
+ - [[```7516f429```](https://github.com/jina-ai/langchain-serve/commit/7516f42954b56c1a4b4dcc8893b68f6abe12b0b4)] __-__ __hitl__: pin requirements (*Deepankar Mahapatro*)
+ - [[```a2825643```](https://github.com/jina-ai/langchain-serve/commit/a2825643f5ebf9781e1a6dfc47ad41b60cd74ad2)] __-__ __hitl__: event-loop for non-async functions (*Deepankar Mahapatro*)
+
+### 📗 Documentation
+
+ - [[```9d6e9c43```](https://github.com/jina-ai/langchain-serve/commit/9d6e9c4399a04ec7078af51e5a17b839bdf4d858)] __-__ update slack count (*Deepankar Mahapatro*)
+
+### 🍹 Other Improvements
+
+ - [[```58589bd7```](https://github.com/jina-ai/langchain-serve/commit/58589bd785632b9f8808dc0bbbba23ab697602a3)] __-__ __version__: the next version will be 0.0.20 (*Jina Dev Bot*)
+
+<a name=release-note-0-0-21></a>
+## Release Note (`0.0.21`)
+
+> Release time: 2023-05-03 06:47:57
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Deepankar Mahapatro,  Jina Dev Bot,  🙇
+
+
+### 🆕 New Features
+
+ - [[```387a9c75```](https://github.com/jina-ai/langchain-serve/commit/387a9c757617aa2282e89e8a7ef5d25ecd3bdf51)] __-__ share auth context with route (*Deepankar Mahapatro*)
+
+### 🍹 Other Improvements
+
+ - [[```bfb3d661```](https://github.com/jina-ai/langchain-serve/commit/bfb3d66170f99304d7488616d0852e90d84e3f23)] __-__ __version__: the next version will be 0.0.21 (*Jina Dev Bot*)
+
+<a name=release-note-0-0-22></a>
+## Release Note (`0.0.22`)
+
+> Release time: 2023-05-05 02:51:04
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Zac Li,  Jina Dev Bot,  Deepankar Mahapatro,  🙇
+
+
+### 🆕 New Features
+
+ - [[```aef4cd70```](https://github.com/jina-ai/langchain-serve/commit/aef4cd705c3b2a19f24e4426005d8e5911cdf2bc)] __-__ export metrics (*Zac Li*)
+
+### 🐞 Bug fixes
+
+ - [[```7e811a59```](https://github.com/jina-ai/langchain-serve/commit/7e811a5955aa741fd18b8e5bbe2dd599adc643c9)] __-__ import error (*Zac Li*)
+ - [[```6331617b```](https://github.com/jina-ai/langchain-serve/commit/6331617b626d27ce62315b465947e589b315c569)] __-__ feedback (*Zac Li*)
+ - [[```d89b03e6```](https://github.com/jina-ai/langchain-serve/commit/d89b03e63b9607a1dcf78892326530c165725709)] __-__ improve metrics sending (*Zac Li*)
+
+### 📗 Documentation
+
+ - [[```833c9dd9```](https://github.com/jina-ai/langchain-serve/commit/833c9dd98ecf4fc438f48f8536a9fcdcd4c5b5ae)] __-__ update readme (*Deepankar Mahapatro*)
+
+### 🏁 Unit Test and CICD
+
+ - [[```23d2384c```](https://github.com/jina-ai/langchain-serve/commit/23d2384c867f0e7298ccb79af6ef6fa6845e0bd0)] __-__ integration test (*Zac Li*)
+
+### 🍹 Other Improvements
+
+ - [[```09107b0e```](https://github.com/jina-ai/langchain-serve/commit/09107b0ee98a194befe9fcb3c48ae884c34dea4d)] __-__ __version__: the next version will be 0.0.22 (*Jina Dev Bot*)
+ - [[```9cc9a0eb```](https://github.com/jina-ai/langchain-serve/commit/9cc9a0ebadf81c967fb4e25ce7c85e92ecbc3dff)] __-__ __version__: the next version will be 0.0.19 (*Jina Dev Bot*)
+ - [[```260f31bc```](https://github.com/jina-ai/langchain-serve/commit/260f31bcfb821af13def43d5ca6ee321880cd41a)] __-__ Merge pull request #46 from jina-ai/feat-authz (*Deepankar Mahapatro*)
+
+<a name=release-note-0-0-23></a>
+## Release Note (`0.0.23`)
+
+> Release time: 2023-05-05 11:09:06
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Deepankar Mahapatro,  Jina Dev Bot,  🙇
+
+
+### 🆕 New Features
+
+ - [[```d5affbd4```](https://github.com/jina-ai/langchain-serve/commit/d5affbd45514d36de5c11dae7a2832028fa129a0)] __-__ pandas-ai as a service (*Deepankar Mahapatro*)
+ - [[```c75a673f```](https://github.com/jina-ai/langchain-serve/commit/c75a673f1d4275abf58cf73039d5c56b133cfe6c)] __-__ upload/download dataframes (*Deepankar Mahapatro*)
+
+### 🍹 Other Improvements
+
+ - [[```7208b384```](https://github.com/jina-ai/langchain-serve/commit/7208b384f9cf89515507dd86489fc0a8e94e16ea)] __-__ __version__: the next version will be 0.0.23 (*Jina Dev Bot*)
 
