@@ -23,6 +23,8 @@
 
 
 
+
+
 <a name=release-note-0-0-1></a>
 ## Release Note (`0.0.1`)
 
@@ -573,4 +575,47 @@
 ### 🍹 Other Improvements
 
  - [[```7208b384```](https://github.com/jina-ai/langchain-serve/commit/7208b384f9cf89515507dd86489fc0a8e94e16ea)] __-__ __version__: the next version will be 0.0.23 (*Jina Dev Bot*)
+
+<a name=release-note-0-0-24></a>
+## Release Note (`0.0.24`)
+
+> Release time: 2023-05-08 15:06:33
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Deepankar Mahapatro,  notandor,  Jina Dev Bot,  🙇
+
+
+### 🐞 Bug fixes
+
+ - [[```a20fbd17```](https://github.com/jina-ai/langchain-serve/commit/a20fbd175fb97d55094005f0c623664a2853a59d)] __-__ upgrade jina version to 3.15.2, to let dependents be installed on platform Windows by poetry (*notandor*)
+
+### 🍹 Other Improvements
+
+ - [[```b7fe7a7e```](https://github.com/jina-ai/langchain-serve/commit/b7fe7a7e0ec8532566b759138e381469cba219b3)] __-__ bump jcloud to fix windows issues (*Deepankar Mahapatro*)
+ - [[```40e5988d```](https://github.com/jina-ai/langchain-serve/commit/40e5988db894d8f7d3ce0545b47c1562e366cb45)] __-__ __version__: the next version will be 0.0.24 (*Jina Dev Bot*)
+
+<a name=release-note-0-0-25></a>
+## Release Note (`0.0.25`)
+
+> Release time: 2023-05-09 16:02:56
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Deepankar Mahapatro,  Jina Dev Bot,  🙇
+
+
+### 🆕 New Features
+
+ - [[```55093573```](https://github.com/jina-ai/langchain-serve/commit/55093573f154639dbe0e76543d80f192a28d986f)] __-__ autogpt-as-a-service (*Deepankar Mahapatro*)
+
+### 📗 Documentation
+
+ - [[```13585d80```](https://github.com/jina-ai/langchain-serve/commit/13585d80a7f48f195c420afa9c4acb29ae8d0560)] __-__ update readme (*Deepankar Mahapatro*)
+
+### 🍹 Other Improvements
+
+ - [[```e05901cb```](https://github.com/jina-ai/langchain-serve/commit/e05901cb1ae938b0f789e9c10742dfb704fa51aa)] __-__ __version__: the next version will be 0.0.25 (*Jina Dev Bot*)
 
