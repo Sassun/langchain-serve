@@ -4,12 +4,23 @@ import os
 import shutil
 import sys
 import time
+import uuid
 from enum import Enum
-from functools import wraps
+from functools import cached_property
 from importlib import import_module
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Tuple, Type, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 
 from docarray import Document, DocumentArray
 from jina import Gateway
@@ -18,6 +29,7 @@ from jina.logging.logger import JinaLogger
 from jina.serve.runtimes.gateway.composite import CompositeGateway
 from jina.serve.runtimes.gateway.http.fastapi import FastAPIBaseGateway
 from pydantic import BaseModel, Field, ValidationError, create_model
+from starlette.types import ASGIApp, Receive, Scope, Send
 from websockets.exceptions import ConnectionClosed
 
 from .playground.utils.helper import (
@@ -30,6 +42,7 @@ from .playground.utils.helper import (
     SERVING,
     Capturing,
     EnvironmentVarCtxtManager,
+    import_from_string,
     parse_uses_with,
     run_cmd,
     run_function,
@@ -260,26 +273,68 @@ class LangchainAgentGateway(CompositeGateway):
 
 
 class ServingGateway(FastAPIBaseGateway):
-    def __init__(self, modules: Tuple[str] = (), *args, **kwargs):
-        from fastapi import FastAPI
-
+    def __init__(
+        self,
+        modules: Tuple[str] = None,
+        fastapi_app_str: str = None,
+        lcserve_app: bool = False,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
-        self.logger.debug(f'Loading modules/files: {",".join(modules)}')
+        self._modules = modules
+        self._fastapi_app_str = fastapi_app_str
+        self._lcserve_app = lcserve_app
         self._fix_sys_path()
-        self._app = FastAPI()
-        self._setup_metrics()
-
+        self._init_fastapi_app()
+        self._configure_cors()
         self._register_healthz()
-        for mod in modules:
-            # TODO: add support for registering a directory
-            if Path(mod).is_file() and mod.endswith('.py'):
-                self._register_file(Path(mod))
-            else:
-                self._register_mod(mod)
+        self._register_modules()
+        self._setup_metrics()
+        self._setup_logging()
 
     @property
     def app(self) -> 'FastAPI':
         return self._app
+
+    @cached_property
+    def workspace(self) -> str:
+        import tempfile
+
+        _temp_dir = tempfile.mkdtemp()
+        if 'FLOW_ID' not in os.environ:
+            self.logger.debug(f'Using temporary workspace directory: {_temp_dir}')
+            return _temp_dir
+
+        try:
+            flow_id = os.environ['FLOW_ID']
+            namespace = flow_id.split('-')[-1]
+            return os.path.join('/data', f'jnamespace-{namespace}')
+        except Exception as e:
+            self.logger.warning(f'Failed to get workspace directory: {e}')
+            return _temp_dir
+
+    def _init_fastapi_app(self):
+        from fastapi import FastAPI
+
+        if self._fastapi_app_str is not None:
+            self.logger.info(f'Loading app from {self._fastapi_app_str}')
+            self._app, _ = import_from_string(self._fastapi_app_str)
+        else:
+            self._app = FastAPI()
+
+    def _configure_cors(self):
+        if self.cors:
+            self.logger.info('Enabling CORS')
+            from fastapi.middleware.cors import CORSMiddleware
+
+            self._app.add_middleware(
+                CORSMiddleware,
+                allow_origins=['*'],
+                allow_credentials=True,
+                allow_methods=['*'],
+                allow_headers=['*'],
+            )
 
     def _fix_sys_path(self):
         if os.getcwd() not in sys.path:
@@ -288,10 +343,11 @@ class ServingGateway(FastAPIBaseGateway):
             # This is where the app code is mounted in the container
             sys.path.append(APPDIR)
 
-        # register all predefined apps to sys.path if they exist
-        if os.path.exists(os.path.join(APPDIR, 'lcserve', 'apps')):
-            for app in os.listdir(os.path.join(APPDIR, 'lcserve', 'apps')):
-                sys.path.append(os.path.join(APPDIR, 'lcserve', 'apps', app))
+        if self._lcserve_app:
+            # register all predefined apps to sys.path if they exist
+            if os.path.exists(os.path.join(APPDIR, 'lcserve', 'apps')):
+                for app in os.listdir(os.path.join(APPDIR, 'lcserve', 'apps')):
+                    sys.path.append(os.path.join(APPDIR, 'lcserve', 'apps', app))
 
     def _setup_metrics(self):
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -306,17 +362,25 @@ class ServingGateway(FastAPIBaseGateway):
             meter_provider=self.meter_provider,
         )
 
-        self.http_duration_counter = self.meter.create_counter(
-            name="http_request_duration_seconds",
-            description="HTTP request duration in seconds",
+        self.duration_counter = self.meter.create_counter(
+            name="lcserve_request_duration_seconds",
+            description="Lc-serve Request duration in seconds",
             unit="s",
         )
 
-        self.ws_duration_counter = self.meter.create_counter(
-            name="ws_request_duration_seconds",
-            description="WS request duration in seconds",
-            unit="s",
+        self.request_counter = self.meter.create_counter(
+            name="lcserve_request_count",
+            description="Lc-serve Request count",
         )
+
+        self.app.add_middleware(
+            MetricsMiddleware,
+            duration_counter=self.duration_counter,
+            request_counter=self.request_counter,
+        )
+
+    def _setup_logging(self):
+        self.app.add_middleware(LoggingMiddleware, logger=self.logger)
 
     def _register_healthz(self):
         @self.app.get("/healthz")
@@ -342,6 +406,18 @@ class ServingGateway(FastAPIBaseGateway):
             await websocket.accept()
             await websocket.send_json({'status': 'ok'})
             await websocket.close()
+
+    def _register_modules(self):
+        if self._modules is None:
+            return
+
+        self.logger.debug(f'Loading modules/files: {",".join(self._modules)}')
+        for mod in self._modules:
+            # TODO: add support for registering a directory
+            if Path(mod).is_file() and mod.endswith('.py'):
+                self._register_file(Path(mod))
+            else:
+                self._register_mod(mod)
 
     def _register_mod(self, mod: str):
         try:
@@ -457,8 +533,8 @@ class ServingGateway(FastAPIBaseGateway):
                     'description': func.__doc__ or '',
                     'tags': [SERVING],
                 },
+                workspace=self.workspace,
                 logger=self.logger,
-                duration_counter=self.http_duration_counter,
             )
 
         elif route_type == RouteType.WEBSOCKET:
@@ -476,8 +552,8 @@ class ServingGateway(FastAPIBaseGateway):
                     'name': _name,
                 },
                 include_callback_handlers=include_callback_handlers,
+                workspace=self.workspace,
                 logger=self.logger,
-                duration_counter=self.ws_duration_counter,
             )
 
 
@@ -498,6 +574,7 @@ def _get_func_data(
     input_data: Union[str, Dict, BaseModel],
     files_data: Dict,
     auth_response: Any = None,
+    workspace: str = None,
     include_if_kwargs_exist: Dict = {},
 ) -> Tuple[Dict[str, Any], Dict[str, str]]:
     import json
@@ -520,6 +597,11 @@ def _get_func_data(
         _func_data['auth_response'] = auth_response
     elif 'kwargs' in _func_params_names:
         _func_data.update({'auth_response': auth_response})
+
+    if 'workspace' in _func_params_names:
+        _func_data['workspace'] = workspace
+    elif 'kwargs' in _func_params_names:
+        _func_data.update({'workspace': workspace})
 
     if include_if_kwargs_exist:
         _func_data.update(include_if_kwargs_exist)
@@ -560,8 +642,8 @@ def create_http_route(
     input_model: BaseModel,
     output_model: BaseModel,
     post_kwargs: Dict,
+    workspace: str,
     logger: JinaLogger,
-    duration_counter: 'Counter',
 ):
     from fastapi import Depends, Form, HTTPException, Security, UploadFile, status
     from fastapi.encoders import jsonable_encoder
@@ -593,7 +675,13 @@ def create_http_route(
         auth_response: Any = None,
     ) -> output_model:
         _output, _error = '', ''
-        _func_data, _envs = _get_func_data(func, input_data, files_data, auth_response)
+        _func_data, _envs = _get_func_data(
+            func=func,
+            input_data=input_data,
+            files_data=files_data,
+            auth_response=auth_response,
+            workspace=workspace,
+        )
         with EnvironmentVarCtxtManager(_envs):
             with Capturing() as stdout:
                 try:
@@ -628,7 +716,6 @@ def create_http_route(
             # If file params are present, we need to use a custom parser to make sure that
             # the input data included in the Form and parsed correctly.
 
-            @measure_duration(duration_counter)
             async def _the_http_route(
                 input_data: input_model = Depends(_the_parser),
                 auth_response: Any = Depends(_the_authorizer),
@@ -647,7 +734,6 @@ def create_http_route(
         else:
             # If no file params are present, we include the input args in the Body.
 
-            @measure_duration(duration_counter)
             async def _the_http_route(
                 input_data: input_model, auth_response: Any = Depends(_the_authorizer)
             ) -> output_model:
@@ -664,7 +750,6 @@ def create_http_route(
             # If file params are present, we need to use a custom parser to make sure that
             # the input data included in the Form and parsed correctly.
 
-            @measure_duration(duration_counter)
             async def _the_http_route(
                 input_data: input_model = Depends(_the_parser), **kwargs
             ) -> output_model:
@@ -681,7 +766,6 @@ def create_http_route(
         else:
             # If no file params are present, we include the input args in the Body.
 
-            @measure_duration(duration_counter)
             async def _the_http_route(input_data: input_model) -> output_model:
                 return await _the_route(
                     input_data=input_data,
@@ -702,8 +786,8 @@ def create_websocket_route(
     output_model: BaseModel,
     include_callback_handlers: bool,
     ws_kwargs: Dict,
+    workspace: str,
     logger: JinaLogger,
-    duration_counter: 'Counter',
 ):
     from fastapi import (
         Depends,
@@ -793,6 +877,7 @@ def create_websocket_route(
                         input_data=_input_data,
                         files_data={},
                         auth_response=auth_response,
+                        workspace=workspace,
                         include_if_kwargs_exist={
                             'websocket': websocket,
                             'streaming_handler': StreamingWebsocketCallbackHandler(
@@ -861,7 +946,6 @@ def create_websocket_route(
         logger.info(f'Auth enabled for `{func.__name__}`')
 
         @app.websocket(**ws_kwargs)
-        @measure_duration(duration_counter)
         async def _create_ws_route(
             websocket: WebSocket, auth_response: Any = Depends(_the_authorizer)
         ) -> output_model:
@@ -870,7 +954,6 @@ def create_websocket_route(
     else:
 
         @app.websocket(**ws_kwargs)
-        @measure_duration(duration_counter)
         async def _create_ws_route(websocket: WebSocket) -> output_model:
             return await _the_route(websocket=websocket, auth_response=None)
 
@@ -945,45 +1028,136 @@ def _get_output_model_fields(func: Callable) -> Dict[str, Tuple[Type, Any]]:
     return _output_model_fields
 
 
-def measure_duration(duration_counter):
+class Timer:
     class SharedData:
         def __init__(self, last_reported_time):
             self.last_reported_time = last_reported_time
 
-    async def send_metrics_periodically(
-        duration_counter, interval, route_name, shared_data
+    def __init__(self, interval: int):
+        self.interval = interval
+
+    async def send_duration_periodically(
+        self,
+        shared_data: SharedData,
+        route: str,
+        protocol: str,
+        counter: Optional['Counter'] = None,
     ):
         while True:
-            await asyncio.sleep(interval)
+            await asyncio.sleep(self.interval)
             current_time = time.perf_counter()
-            if duration_counter:
-                duration_counter.add(
-                    current_time - shared_data.last_reported_time, {"route": route_name}
+            if counter:
+                counter.add(
+                    current_time - shared_data.last_reported_time,
+                    {'route': route, 'protocol': protocol},
                 )
+
             shared_data.last_reported_time = current_time
 
-    def decorator(func):
-        @wraps(func)
-        async def wrapped(*args, **kwargs):
-            shared_data = SharedData(last_reported_time=time.perf_counter())
-            # Start the async task which reports the metrics every 5s
-            send_metrics_task = asyncio.create_task(
-                send_metrics_periodically(
-                    duration_counter, 5, func.__name__, shared_data
+
+class MetricsMiddleware:
+    def __init__(
+        self,
+        app: ASGIApp,
+        duration_counter: Optional['Counter'] = None,
+        request_counter: Optional['Counter'] = None,
+    ):
+        self.app = app
+        self.duration_counter = duration_counter
+        self.request_counter = request_counter
+        # TODO: figure out solution for static assets
+        self.skip_routes = [
+            '/docs',
+            '/redoc',
+            '/openapi.json',
+            '/healthz',
+            '/dry_run',
+            '/metrics',
+            '/favicon.ico',
+        ]
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope['path'] not in self.skip_routes:
+            timer = Timer(5)
+            shared_data = timer.SharedData(last_reported_time=time.perf_counter())
+            send_duration_task = asyncio.create_task(
+                timer.send_duration_periodically(
+                    shared_data, scope['path'], scope['type'], self.duration_counter
                 )
             )
             try:
-                result = await func(*args, **kwargs)
-                return result
+                await self.app(scope, receive, send)
             finally:
-                send_metrics_task.cancel()
-                # Final metrics update to wrap up the untracked duration in the end
-                if duration_counter:
-                    duration_counter.add(
+                send_duration_task.cancel()
+                if self.duration_counter:
+                    self.duration_counter.add(
                         time.perf_counter() - shared_data.last_reported_time,
-                        {"route": func.__name__},
+                        {'route': scope['path'], 'protocol': scope['type']},
                     )
+                if self.request_counter:
+                    self.request_counter.add(
+                        1, {'route': scope['path'], 'protocol': scope['type']}
+                    )
+        else:
+            await self.app(scope, receive, send)
 
-        return wrapped
 
-    return decorator
+class LoggingMiddleware:
+    def __init__(self, app: ASGIApp, logger: JinaLogger):
+        self.app = app
+        self.logger = logger
+        self.skip_routes = [
+            '/docs',
+            '/redoc',
+            '/openapi.json',
+            '/healthz',
+            '/dry_run',
+            '/metrics',
+            '/favicon.ico',
+        ]
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope['path'] not in self.skip_routes:
+            # Get IP address, use X-Forwarded-For if set else use scope['client'][0]
+            ip_address = scope.get('client')[0] if scope.get('client') else None
+            if scope.get('headers'):
+                for header in scope['headers']:
+                    if header[0].decode('latin-1') == 'x-forwarded-for':
+                        ip_address = header[1].decode('latin-1').split(",")[0].strip()
+                        break
+
+            # Init the request/connection ID
+            request_id = str(uuid.uuid4()) if scope["type"] == "http" else None
+            connection_id = str(uuid.uuid4()) if scope["type"] == "websocket" else None
+
+            status_code = None
+            start_time = time.perf_counter()
+
+            async def custom_send(message: dict) -> None:
+                nonlocal status_code
+
+                # TODO: figure out a way to do the same for ws
+                if request_id and message.get('type') == 'http.response.start':
+                    message.setdefault('headers', []).append(
+                        (b'X-API-Request-ID', str(request_id).encode())
+                    )
+                    status_code = message.get('status')
+
+                await send(message)
+
+            await self.app(scope, receive, custom_send)
+
+            end_time = time.perf_counter()
+            duration = round(end_time - start_time, 3)
+
+            if scope["type"] == "http":
+                self.logger.info(
+                    f"HTTP request: {request_id} - Path: {scope['path']} - Client IP: {ip_address} - Status code: {status_code} - Duration: {duration} s"
+                )
+            elif scope["type"] == "websocket":
+                self.logger.info(
+                    f"WebSocket connection: {connection_id} - Path: {scope['path']} - Client IP: {ip_address} - Duration: {duration} s"
+                )
+
+        else:
+            await self.app(scope, receive, send)

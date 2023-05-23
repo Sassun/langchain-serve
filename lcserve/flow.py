@@ -1,32 +1,37 @@
 import asyncio
 import inspect
 import os
+import secrets
+import shutil
 import sys
 import tempfile
 from contextlib import contextmanager
-from dataclasses import dataclass
 from functools import wraps
 from http import HTTPStatus
 from importlib import import_module
 from shutil import copytree
 from tempfile import mkdtemp
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import requests
 import yaml
 from docarray import Document, DocumentArray
 from jina import Flow
 
+from .config import get_jcloud_config, DEFAULT_TIMEOUT
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
 APP_NAME = 'langchain'
 BABYAGI_APP_NAME = 'babyagi'
 PDF_QNA_APP_NAME = 'pdfqna'
 PANDAS_AI_APP_NAME = 'pandasai'
 AUTOGPT_APP_NAME = 'autogpt'
-DEFAULT_TIMEOUT = 120
+
 ServingGatewayConfigFile = 'servinggateway_config.yml'
-JCloudConfigFile = 'jcloud_config.yml'
-# TODO: this needs to be pulled from Jina Wolf API dynamically after the issue has been fixed on the API side
-APP_LOGS_URL = "[dashboards.wolf.jina.ai](https://dashboard.wolf.jina.ai/d/flow/flow-monitor?var-flow={flow}&var-datasource=thanos&orgId=2&from=now-24h&to=now&viewPanel=85)"
+APP_LOGS_URL = "[https://cloud.jina.ai/](https://cloud.jina.ai/user/flows?action=detail&id={app_id}&tab=logs)"
 
 
 def syncify(f):
@@ -153,20 +158,15 @@ def hubble_exists(name: str, secret: Optional[str] = None) -> bool:
     )
 
 
-def _any_websocket_router(app) -> bool:
-    # Go through the module and find all functions decorated by `serving` decorator
-    for _, func in inspect.getmembers(app, inspect.isfunction):
-        if hasattr(func, '__ws_serving__'):
-            return True
+def _add_to_path(lcserve_app: bool = False):
+    # add current directory to the beginning of the path to prioritize local imports
+    sys.path.insert(0, os.getcwd())
 
-    return False
-
-
-def _add_to_path():
-    sys.path.append(os.getcwd())
-    # get all directories in the apps folder and add them to the path
-    for app in os.listdir(os.path.join(os.path.dirname(__file__), 'apps')):
-        sys.path.append(os.path.join(os.path.dirname(__file__), 'apps', app))
+    if lcserve_app:
+        # get all directories in the apps folder and add them to the path
+        for app in os.listdir(os.path.join(os.path.dirname(__file__), 'apps')):
+            if os.path.isdir(os.path.join(os.path.dirname(__file__), 'apps', app)):
+                sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'apps', app))
 
 
 def _get_parent_dir(modname: str, filename: str) -> str:
@@ -177,79 +177,209 @@ def _get_parent_dir(modname: str, filename: str) -> str:
     return parent_dir
 
 
-def push_app_to_hubble(
-    mod: str,
-    tag: str = 'latest',
-    requirements: Tuple[str] = None,
-    version: str = 'latest',
-    platform: str = None,
-    verbose: Optional[bool] = False,
-) -> Tuple[str, bool]:
-    from hubble.executor.hubio import HubIO
-    from hubble.executor.parsers import set_hub_push_parser
-
-    from .backend.playground.utils.helper import get_random_name
-
+def _load_module_from_str(module_str: str):
     try:
-        _add_to_path()
-        app = import_module(mod)
-        file = app.__file__
-        if file.endswith('.py'):
-            appdir = _get_parent_dir(mod, file)
-        else:
-            print(f'Unknown file type for module {mod}')
-            sys.exit(1)
+        module = import_module(module_str)
     except ModuleNotFoundError:
-        print(f'Could not find module {mod}')
+        print(f'Could not find module {module_str}')
         sys.exit(1)
     except AttributeError:
-        print(f'Could not find appdir for module {mod}')
+        print(f'Could not find appdir for module {module_str}')
         sys.exit(1)
     except Exception as e:
         print(f'Unknown error: {e}')
         sys.exit(1)
+    return module
 
-    tmpdir = mkdtemp()
 
-    # Copy appdir to tmpdir
-    copytree(appdir, tmpdir, dirs_exist_ok=True)
-    # Copy lcserve to tmpdir
-    copytree(
-        os.path.dirname(__file__), os.path.join(tmpdir, 'lcserve'), dirs_exist_ok=True
+def _load_app_from_fastapi_app_str(
+    fastapi_app_str: str,
+) -> Tuple['FastAPI', ModuleType]:
+    from .backend.playground.utils.helper import (
+        ImportFromStringError,
+        import_from_string,
     )
 
-    name = get_random_name()
+    try:
+        fastapi_app, module = import_from_string(fastapi_app_str)
+    except ImportFromStringError as e:
+        print(f'Could not import app from {fastapi_app_str}: {e}')
+        sys.exit(1)
 
+    return fastapi_app, module
+
+
+def _any_websocket_route_in_app(app: 'FastAPI') -> bool:
+    from fastapi.routing import APIWebSocketRoute
+
+    return any(isinstance(r, APIWebSocketRoute) for r in app.routes)
+
+
+def _any_websocket_router_in_module(module: ModuleType) -> bool:
+    # Go through the module and find all functions decorated by `serving` decorator
+    for _, func in inspect.getmembers(module, inspect.isfunction):
+        if hasattr(func, '__ws_serving__'):
+            return True
+
+    return False
+
+
+def get_uri(id: str, tag: str):
+    import requests
+
+    r = requests.get(f"https://apihubble.jina.ai/v2/executor/getMeta?id={id}&tag={tag}")
+    _json = r.json()
+    _image_name = _json['data']['name']
+    _user_name = _json['meta']['owner']['name']
+    return f'jinaai+docker://{_user_name}/{_image_name}:{tag}'
+
+
+def get_module_dir(
+    module_str: str = None,
+    fastapi_app_str: str = None,
+    app_dir: str = None,
+    lcserve_app: bool = False,
+) -> Tuple[str, bool]:
+    _add_to_path(lcserve_app=lcserve_app)
+
+    if module_str is not None:
+        _module = _load_module_from_str(module_str)
+        _is_websocket = _any_websocket_router_in_module(_module)
+        _module_dir = _get_parent_dir(modname=module_str, filename=_module.__file__)
+    elif fastapi_app_str is not None:
+        fastapi_app, _module = _load_app_from_fastapi_app_str(fastapi_app_str)
+        _is_websocket = _any_websocket_route_in_app(fastapi_app)
+        _module_dir = _get_parent_dir(
+            modname=fastapi_app_str, filename=_module.__file__
+        )
+
+    # if app_dir is not None, return it
+    if app_dir is not None:
+        return app_dir, _is_websocket
+
+    if not _module.__file__.endswith('.py'):
+        print(f'Unknown file type for module {module_str}')
+        sys.exit(1)
+
+    return _module_dir, _is_websocket
+
+
+def _remove_langchain_serve(tmpdir: str) -> None:
+    _requirements_txt = 'requirements.txt'
+    _pyproject_toml = 'pyproject.toml'
+
+    # Remove langchain-serve itself from the requirements list as a fixed version might break things
+    if os.path.exists(os.path.join(tmpdir, _requirements_txt)):
+        with open(os.path.join(tmpdir, _requirements_txt), 'r') as f:
+            reqs = f.read().splitlines()
+
+        reqs = [r for r in reqs if not r.startswith("langchain-serve")]
+        with open(os.path.join(tmpdir, _requirements_txt), 'w') as f:
+            f.write('\n'.join(reqs))
+
+    if os.path.exists(os.path.join(tmpdir, _pyproject_toml)):
+        import toml
+
+        with open(os.path.join(tmpdir, _pyproject_toml), 'r') as f:
+            pyproject = toml.load(f)
+
+        if 'tool' in pyproject and 'poetry' in pyproject['tool']:
+            poetry = pyproject['tool']['poetry']
+            if 'dependencies' in poetry:
+                poetry['dependencies'] = {
+                    k: v
+                    for k, v in poetry['dependencies'].items()
+                    if k != 'langchain-serve'
+                }
+
+            if 'dev-dependencies' in poetry:
+                poetry['dev-dependencies'] = {
+                    k: v
+                    for k, v in poetry['dev-dependencies'].items()
+                    if k != 'langchain-serve'
+                }
+
+        with open(os.path.join(tmpdir, _pyproject_toml), 'w') as f:
+            toml.dump(pyproject, f)
+
+
+def _handle_dependencies(reqs: Tuple[str], tmpdir: str):
     # Create the requirements.txt if requirements are given
-    if requirements is not None and isinstance(requirements, Sequence):
-        # Get existing requirements and add the new ones
-        if os.path.exists(os.path.join(tmpdir, 'requirements.txt')):
-            with open(os.path.join(tmpdir, 'requirements.txt'), 'r') as f:
-                requirements = set(requirements + tuple(f.read().splitlines()))
+    _requirements_txt = 'requirements.txt'
+    _pyproject_toml = 'pyproject.toml'
 
-        with open(os.path.join(tmpdir, 'requirements.txt'), 'w') as f:
-            f.write('\n'.join(requirements))
+    _existing_requirements = []
+    # Get existing requirements and add the new ones
+    if os.path.exists(os.path.join(tmpdir, _requirements_txt)):
+        with open(os.path.join(tmpdir, _requirements_txt), 'r') as f:
+            _existing_requirements = tuple(f.read().splitlines())
 
-    # Remove langchain-serve itself from the requirements list as it may be entered by mistake and break things
-    if os.path.exists(os.path.join(tmpdir, 'requirements.txt')):
-        with open(os.path.join(tmpdir, 'requirements.txt'), 'r') as f:
-            requirements = f.read().splitlines()
+    _new_requirements = []
+    if reqs is not None:
+        for _req in reqs:
+            if os.path.isdir(_req):
+                if os.path.exists(os.path.join(_req, _requirements_txt)):
+                    with open(os.path.join(_req, _requirements_txt), 'r') as f:
+                        _new_requirements = f.read().splitlines()
 
-        requirements = [r for r in requirements if not r.startswith("langchain-serve")]
+                elif os.path.exists(os.path.join(_req, _pyproject_toml)):
+                    # copy pyproject.toml to tmpdir
+                    shutil.copyfile(
+                        os.path.join(_req, _pyproject_toml),
+                        os.path.join(tmpdir, _pyproject_toml),
+                    )
+            elif os.path.isfile(_req):
+                # if it's a file and name is requirements.txt, read it
+                if os.path.basename(_req) == _requirements_txt:
+                    with open(_req, 'r') as f:
+                        _new_requirements = f.read().splitlines()
+                elif os.path.basename(_req) == _pyproject_toml:
+                    # copy pyproject.toml to tmpdir
+                    shutil.copyfile(_req, os.path.join(tmpdir, _pyproject_toml))
+            else:
+                _new_requirements.append(_req)
 
-        with open(os.path.join(tmpdir, 'requirements.txt'), 'w') as f:
-            f.write('\n'.join(requirements))
+        _final_requirements = set(_existing_requirements).union(set(_new_requirements))
+        with open(os.path.join(tmpdir, _requirements_txt), 'w') as f:
+            f.write('\n'.join(_final_requirements))
 
-    # Create the Dockerfile
-    with open(os.path.join(tmpdir, 'Dockerfile'), 'w') as f:
-        dockerfile = [
-            f'FROM jinawolf/serving-gateway:{version}',
-            'COPY . /appdir/',
-            'RUN if [ -e /appdir/requirements.txt ]; then pip install -r /appdir/requirements.txt; fi',
-            'ENTRYPOINT [ "jina", "gateway", "--uses", "config.yml" ]',
-        ]
-        f.write('\n\n'.join(dockerfile))
+    _remove_langchain_serve(tmpdir)
 
+
+def _handle_dockerfile(tmpdir: str, version: str):
+    # if file `lcserve.Dockefile` exists, use it
+    _lcserve_dockerfile = 'lcserve.Dockerfile'
+    if os.path.exists(os.path.join(tmpdir, _lcserve_dockerfile)):
+        shutil.copyfile(
+            os.path.join(tmpdir, _lcserve_dockerfile),
+            os.path.join(tmpdir, 'Dockerfile'),
+        )
+
+        # read the Dockerfile and replace the version
+        with open(os.path.join(tmpdir, 'Dockerfile'), 'r') as f:
+            dockerfile = f.read()
+
+        dockerfile = dockerfile.replace(
+            'jinawolf/serving-gateway:${version}',
+            f'jinawolf/serving-gateway:{version}',
+        )
+
+        with open(os.path.join(tmpdir, 'Dockerfile'), 'w') as f:
+            f.write(dockerfile)
+
+    else:
+        # Create the Dockerfile
+        with open(os.path.join(tmpdir, 'Dockerfile'), 'w') as f:
+            dockerfile = [
+                f'FROM jinawolf/serving-gateway:{version}',
+                'COPY . /appdir/',
+                'RUN if [ -e /appdir/requirements.txt ]; then pip install -r /appdir/requirements.txt; fi',
+                'ENTRYPOINT [ "jina", "gateway", "--uses", "config.yml" ]',
+            ]
+            f.write('\n\n'.join(dockerfile))
+
+
+def _handle_config_yaml(tmpdir: str, name: str):
     # Create the config.yml
     with open(os.path.join(tmpdir, 'config.yml'), 'w') as f:
         config_dict = {
@@ -261,13 +391,23 @@ def push_app_to_hubble(
         }
         f.write(yaml.safe_dump(config_dict, sort_keys=False))
 
+
+def _push_to_hubble(
+    tmpdir: str, name: str, tag: str, platform: str, verbose: bool
+) -> str:
+    from hubble.executor.hubio import HubIO
+    from hubble.executor.parsers import set_hub_push_parser
+
+    from .backend.playground.utils.helper import EnvironmentVarCtxtManager
+
+    secret = secrets.token_hex(8)
     args_list = [
         tmpdir,
         '--tag',
         tag,
         '--secret',
-        'somesecret',
-        '--public',
+        secret,
+        '--private',
         '--no-usage',
         '--no-cache',
     ]
@@ -280,37 +420,43 @@ def push_app_to_hubble(
     if platform:
         args.platform = platform
 
-    if hubble_exists(name):
+    if hubble_exists(name, secret):
         args.force_update = name
 
-    return HubIO(args).push().get('id'), _any_websocket_router(app)
+    push_envs = (
+        {'JINA_HUBBLE_HIDE_EXECUTOR_PUSH_SUCCESS_MSG': 'true'} if not verbose else {}
+    )
+    with EnvironmentVarCtxtManager(push_envs):
+        gateway_id = HubIO(args).push().get('id')
+        return gateway_id + ':' + tag
 
 
-@dataclass
-class Defaults:
-    instance: str = 'C2'
-    autoscale_min: int = 0
-    autoscale_max: int = 10
-    autoscale_rps: int = 10
-    autoscale_stable_window: int = DEFAULT_TIMEOUT
+def push_app_to_hubble(
+    module_dir: str,
+    image_name=None,
+    tag: str = 'latest',
+    requirements: Tuple[str] = None,
+    version: str = 'latest',
+    platform: str = None,
+    verbose: Optional[bool] = False,
+) -> str:
+    from .backend.playground.utils.helper import get_random_name
 
-    def __post_init__(self):
-        # read from config yaml
-        with open(os.path.join(os.getcwd(), JCloudConfigFile), 'r') as fp:
-            config = yaml.safe_load(fp.read())
-            self.instance = config.get('instance', self.instance)
-            self.autoscale_min = config.get('autoscale', {}).get(
-                'min', self.autoscale_min
-            )
-            self.autoscale_max = config.get('autoscale', {}).get(
-                'max', self.autoscale_max
-            )
-            self.autoscale_rps = config.get('autoscale', {}).get(
-                'rps', self.autoscale_rps
-            )
-            self.autoscale_stable_window = config.get('autoscale', {}).get(
-                'stable_window', self.autoscale_stable_window
-            )
+    tmpdir = mkdtemp()
+
+    # Copy appdir to tmpdir
+    copytree(module_dir, tmpdir, dirs_exist_ok=True)
+    # Copy lcserve to tmpdir
+    copytree(
+        os.path.dirname(__file__), os.path.join(tmpdir, 'lcserve'), dirs_exist_ok=True
+    )
+
+    if image_name is None:
+        image_name = get_random_name()
+    _handle_dependencies(requirements, tmpdir)
+    _handle_dockerfile(tmpdir, version)
+    _handle_config_yaml(tmpdir, image_name)
+    return _push_to_hubble(tmpdir, image_name, tag, platform, verbose)
 
 
 def get_gateway_config_yaml_path() -> str:
@@ -318,6 +464,9 @@ def get_gateway_config_yaml_path() -> str:
 
 
 def get_gateway_uses(id: str) -> str:
+    if id is not None:
+        if id.startswith('jinahub+docker') or id.startswith('jinaai+docker'):
+            return id
     return f'jinahub+docker://{id}'
 
 
@@ -361,25 +510,6 @@ def get_global_jcloud_args(app_id: str = None, name: str = APP_NAME) -> Dict:
     }
 
 
-@dataclass
-class AutoscaleConfig:
-    min: int = Defaults.autoscale_min
-    max: int = Defaults.autoscale_max
-    rps: int = Defaults.autoscale_rps
-    stable_window: int = Defaults.autoscale_stable_window
-
-    def to_dict(self) -> Dict:
-        return {
-            'autoscale': {
-                'min': self.min,
-                'max': self.max,
-                'metric': 'rps',
-                'target': self.rps,
-                'stable_window': self.stable_window,
-            }
-        }
-
-
 def get_uvicorn_args() -> Dict:
     return {
         'uvicorn_kwargs': {
@@ -389,42 +519,19 @@ def get_uvicorn_args() -> Dict:
     }
 
 
-def get_with_args_for_jcloud() -> Dict:
+def get_with_args_for_jcloud(cors: bool = True) -> Dict:
     return {
         'with': {
+            'cors': cors,
             'extra_search_paths': ['/workdir/lcserve'],
             **get_uvicorn_args(),
         }
     }
 
 
-def get_gateway_jcloud_args(
-    instance: str = Defaults.instance,
-    is_websocket: bool = False,
-    timeout: int = DEFAULT_TIMEOUT,
-) -> Dict:
-    _autoscale = AutoscaleConfig(stable_window=timeout)
-
-    # TODO: remove this when websocket + autoscale is supported in JCloud
-    _timeout = 600 if is_websocket else timeout
-    _autoscale_args = {} if is_websocket else _autoscale.to_dict()
-
-    return {
-        'jcloud': {
-            'expose': True,
-            'resources': {
-                'instance': instance,
-                'capacity': 'spot',
-            },
-            'healthcheck': False if is_websocket else True,
-            'timeout': _timeout,
-            **_autoscale_args,
-        }
-    }
-
-
 def get_flow_dict(
-    module: Union[str, List[str]],
+    module_str: str = None,
+    fastapi_app_str: str = None,
     jcloud: bool = False,
     port: int = 8080,
     name: str = APP_NAME,
@@ -432,53 +539,69 @@ def get_flow_dict(
     app_id: str = None,
     gateway_id: str = None,
     is_websocket: bool = False,
+    jcloud_config_path: str = None,
+    cors: bool = True,
+    lcserve_app: bool = False,
 ) -> Dict:
-    if isinstance(module, str):
-        module = [module]
+    if jcloud:
+        jcloud_config = get_jcloud_config(
+            config_path=jcloud_config_path, timeout=timeout, is_websocket=is_websocket
+        )
 
     uses = get_gateway_uses(id=gateway_id) if jcloud else get_gateway_config_yaml_path()
     flow_dict = {
         'jtype': 'Flow',
-        **(get_with_args_for_jcloud() if jcloud else {}),
+        **(get_with_args_for_jcloud(cors) if jcloud else {}),
         'gateway': {
             'uses': uses,
             'uses_with': {
-                'modules': module,
+                'modules': [module_str] if module_str else [],
+                'fastapi_app_str': fastapi_app_str or '',
+                'lcserve_app': lcserve_app,
             },
             'port': [port],
             'protocol': ['websocket'] if is_websocket else ['http'],
             **get_uvicorn_args(),
-            **(
-                get_gateway_jcloud_args(timeout=timeout, is_websocket=is_websocket)
-                if jcloud
-                else {}
-            ),
+            **(jcloud_config.to_dict() if jcloud else {}),
         },
         **(get_global_jcloud_args(app_id=app_id, name=name) if jcloud else {}),
     }
     if os.environ.get("LCSERVE_TEST", False):
-        flow_dict['with'] = {
-            'metrics': True,
-            'metrics_exporter_host': 'http://localhost',
-            'metrics_exporter_port': 4317,
-        }
+        if 'with' not in flow_dict:
+            flow_dict['with'] = {}
+
+        flow_dict['with'].update(
+            {
+                'metrics': True,
+                'metrics_exporter_host': 'http://localhost',
+                'metrics_exporter_port': 4317,
+            }
+        )
     return flow_dict
 
 
 def get_flow_yaml(
-    module: Union[str, List[str]],
+    module_str: str = None,
+    fastapi_app_str: str = None,
     jcloud: bool = False,
     port: int = 8080,
     name: str = APP_NAME,
     is_websocket: bool = False,
+    cors: bool = True,
+    jcloud_config_path: str = None,
+    lcserve_app: bool = False,
 ) -> str:
     return yaml.safe_dump(
         get_flow_dict(
-            module=module,
-            jcloud=jcloud,
+            module_str=module_str,
+            fastapi_app_str=fastapi_app_str,
             port=port,
             name=name,
             is_websocket=is_websocket,
+            cors=cors,
+            jcloud=jcloud,
+            jcloud_config_path=jcloud_config_path,
+            lcserve_app=lcserve_app,
         ),
         sort_keys=False,
     )
@@ -487,6 +610,8 @@ def get_flow_yaml(
 async def deploy_app_on_jcloud(
     flow_dict: Dict, app_id: str = None, verbose: bool = False
 ) -> Tuple[str, str]:
+    from .backend.playground.utils.helper import EnvironmentVarCtxtManager
+
     os.environ['JCLOUD_LOGLEVEL'] = 'INFO' if verbose else 'ERROR'
 
     from jcloud.flow import CloudFlow
@@ -496,13 +621,15 @@ async def deploy_app_on_jcloud(
         with open(flow_path, 'w') as f:
             yaml.safe_dump(flow_dict, f, sort_keys=False)
 
-        if app_id is None:  # appid is None means we are deploying a new app
-            jcloud_flow = await CloudFlow(path=flow_path).__aenter__()
-            app_id = jcloud_flow.flow_id
+        deploy_envs = {'JCLOUD_HIDE_SUCCESS_MSG': 'true'} if not verbose else {}
+        with EnvironmentVarCtxtManager(deploy_envs):
+            if app_id is None:  # appid is None means we are deploying a new app
+                jcloud_flow = await CloudFlow(path=flow_path).__aenter__()
+                app_id = jcloud_flow.flow_id
 
-        else:  # appid is not None means we are updating an existing app
-            jcloud_flow = CloudFlow(path=flow_path, flow_id=app_id)
-            await jcloud_flow.update()
+            else:  # appid is not None means we are updating an existing app
+                jcloud_flow = CloudFlow(path=flow_path, flow_id=app_id)
+                await jcloud_flow.update()
 
         for k, v in jcloud_flow.endpoints.items():
             if k.lower() == 'gateway (http)' or k.lower() == 'gateway (websocket)':
@@ -560,14 +687,13 @@ async def get_app_status_on_jcloud(app_id: str):
 
         status: Dict = app_status['status']
         endpoint = _get_endpoint(status)
-        flow_namespace = app_id.split("-")[-1]
 
         _add_row('App ID', app_id, bold_key=True, bold_value=True)
         _add_row('Phase', status.get('phase', ''))
         _add_row('Endpoint', endpoint)
         _add_row(
             'App logs',
-            Markdown(APP_LOGS_URL.format(flow=flow_namespace), justify='center'),
+            Markdown(APP_LOGS_URL.format(app_id=app_id), justify='center'),
         )
         _add_row('Swagger UI', _replace_wss_with_https(f'{endpoint}/docs'))
         _add_row('OpenAPI JSON', _replace_wss_with_https(f'{endpoint}/openapi.json'))
@@ -664,3 +790,7 @@ def update_requirements(path: str, requirements: List[str]) -> List[str]:
             requirements.extend(f.read().splitlines())
 
     return requirements
+
+
+def remove_prefix(text, prefix):
+    return text[len(prefix) :] if text.startswith(prefix) else text
