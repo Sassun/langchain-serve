@@ -717,11 +717,12 @@ Applications hosted on JCloud are priced in two categories:
 
 - Base credits are charged to ensure high availability for your application by maintaining at least one instance running continuously, ready to handle incoming requests.
 - Actual credits charged for base credits are calculated based on the [instance type as defined by Jina AI Cloud](https://docs.jina.ai/concepts/jcloud/configuration/#cpu-tiers).
-- By default, instance type `C3` is used with a minimum of 1 instance and efs disk of size 1G, which means that if your application is served on JCloud, you will be charged ~10 credits per hour.
-- You can change the instance type and the minimum number of instances by providing a YAML configuration file using the `--config` option. For example, if you want to use instance type `C4` with a minimum of 0 replicas, you can provide the following configuration file:
+- By default, instance type `C3` is used with a minimum of 1 instance and [Amazon EFS](https://aws.amazon.com/efs/) disk of size 1G, which means that if your application is served on JCloud, you will be charged ~10 credits per hour.
+- You can change the instance type and the minimum number of instances by providing a YAML configuration file using the `--config` option. For example, if you want to use instance type `C4` with a minimum of 0 replicas, and 2G EFS disk, you can provide the following configuration file:
   ```yaml
   instance: C4
   autoscale_min: 0
+  disk_size: 2G
   ```
 
 **Serving credits**
@@ -741,14 +742,16 @@ Consider an HTTP application that has served requests for `10` minutes in the la
 ```
 instance: C4
 autoscale_min: 0
+disk_size: 2G
 ```
 
 Total credits per hour charged would be `3.33`. The calculation is as follows:
 ```
 C4 instance has an hourly credit rate of 20.
-Base credits = 0 (since `autoscale_min` is 0)
+EFS has hourly credit rate of 0.104 per GB.
+Base credits = 0 + 2 * 0.104 = 0.208 (since `autoscale_min` is 0)
 Serving credits = 20 * 10/60 = 3.33
-Total credits per hour = 3.33
+Total credits per hour = 0.208 + 3.33 = 3.538
 ```
 
 **Example 2:**
@@ -757,19 +760,22 @@ Consider a WebSocket application that had active connections for 20 minutes in t
 ```
 instance: C3
 autoscale_min: 1
+disk_size: 1G
 ```
 
 Total credits per hour charged would be `13.33`. The calculation is as follows:
 ```
 C3 instance has an hourly credit rate of 10.
-Base credits = 10 (since `autoscale_min` is 1)
+EFS has hourly credit rate of 0.104 per GB.
+Base credits = 10 + 1 * 0.104 = 10.104 (since `autoscale_min` is 1)
 Serving credits = 10 * 20/60 = 3.33
-Total credits per hour = 10 + 3.33 = 13.33
+Total credits per hour = 10.104 + 3.33 = 13.434
 ```
 
 # ❓ Frequently Asked Questions
 
 - [My client that connects to the JCloud hosted App gets timed-out, what should I do?](#my-client-that-connects-to-the-jcloud-hosted-app-gets-timed-out-what-should-I-do)
+- [How to pass environment variables to the app?](#how-to-pass-environment-variables-to-the-app)
 - [JCloud deployment failed at pushing image to Jina Hubble, what should I do?](#jcloud-deployment-failed-at-pushing-image-to-jina-hubble-what-should-i-di)
 - [Debug babyagi playground request/response for external integration](#debug-babyagi-playground-requestresponse-for-external-integration)
 
@@ -780,6 +786,23 @@ If you make long HTTP/ WebSocket requests, the default timeout value (2 minutes)
 Additionally, for HTTP, you may also experience timeouts due to limitations in the OSS we used in `langchain-serve`. While we are working to permanently address this issue, we recommend using HTTP/1.1 in your client as a temporary workaround.
 
 For WebSocket, please note that the connection will be closed if idle for more than 5 minutes.
+
+### How to pass environment variables to the app?
+
+We provide 2 options to pass environment variables:
+
+1. Use `--env` during app deployment to load env variables from a `.env` file. For example, `lc-serve deploy jcloud app --env some.env` will load all env variables from `some.env` file and pass them to the app. These env variables will be available in the app as `os.environ['ENV_VAR_NAME']`.
+
+2. You can also pass env variables while sending requests to the app both in HTTP and WebSocket. `envs` field in the request body is used to pass env variables. For example
+  
+    ```json
+    {
+        "question": "What is the meaning of life?",
+        "envs": {
+            "ENV_VAR_NAME": "ENV_VAR_VALUE"
+        }
+    }
+    ```
 
 ### JCloud deployment failed at pushing image to Jina Hubble, what should I do?
 
