@@ -38,6 +38,11 @@
 
 
 
+
+
+
+
+
 <a name=release-note-0-0-1></a>
 ## Release Note (`0.0.1`)
 
@@ -996,4 +1001,108 @@
  - [[```346f0118```](https://github.com/jina-ai/langchain-serve/commit/346f01189e47401a8089b109873e76bd2ca3122f)] __-__ __version__: the next version will be 0.0.38 (*Jina Dev Bot*)
  - [[```af32e2c7```](https://github.com/jina-ai/langchain-serve/commit/af32e2c75d886a487a7b4d50cc69d3b6641a496e)] __-__ __version__: the next version will be 0.0.37 (*Jina Dev Bot*)
  - [[```9bd1aafe```](https://github.com/jina-ai/langchain-serve/commit/9bd1aafe090bcb3b1b4f4be6d26a7fd73f2a2627)] __-__ Merge pull request #88 from jina-ai/feat-storage (*Deepankar Mahapatro*)
+
+<a name=release-note-0-0-39></a>
+## Release Note (`0.0.39`)
+
+> Release time: 2023-05-31 13:26:41
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Zac Li,  Deepankar Mahapatro,  Jina Dev Bot,  🙇
+
+
+### 🆕 New Features
+
+ - [[```decef937```](https://github.com/jina-ai/langchain-serve/commit/decef937e44e3b2590b6abd1173dbf3d8865b062)] __-__ support pushing image publicly (*Zac Li*)
+
+### 🏁 Unit Test and CICD
+
+ - [[```94a9ecee```](https://github.com/jina-ai/langchain-serve/commit/94a9ecee23bbfc484210d8929828151554c37a78)] __-__ update readme (*Deepankar Mahapatro*)
+
+### 🍹 Other Improvements
+
+ - [[```3f72b6c4```](https://github.com/jina-ai/langchain-serve/commit/3f72b6c481427d36da096ca1048f9b6c5ece4226)] __-__ __version__: the next version will be 0.0.39 (*Jina Dev Bot*)
+
+<a name=release-note-0-0-40></a>
+## Release Note (`0.0.40`)
+
+> Release time: 2023-06-01 05:14:03
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Deepankar Mahapatro,  Jina Dev Bot,  🙇
+
+
+### 🐞 Bug fixes
+
+ - [[```acdde6be```](https://github.com/jina-ai/langchain-serve/commit/acdde6bec1fe465f305b7d77877a7841d937371c)] __-__ add public to push (*Deepankar Mahapatro*)
+
+### 🏁 Unit Test and CICD
+
+ - [[```f681fb1f```](https://github.com/jina-ai/langchain-serve/commit/f681fb1f9efed5690a2643cb9f0184166ca2c65a)] __-__ update langflow-push.yml (*Deepankar Mahapatro*)
+
+### 🍹 Other Improvements
+
+ - [[```9e1de166```](https://github.com/jina-ai/langchain-serve/commit/9e1de1666ad196220e33513610d0b476723f54f9)] __-__ __version__: the next version will be 0.0.40 (*Jina Dev Bot*)
+
+<a name=release-note-0-0-41></a>
+## Release Note (`0.0.41`)
+
+> Release time: 2023-06-01 10:19:52
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Deepankar Mahapatro,  Jina Dev Bot,  🙇
+
+
+### 🏁 Unit Test and CICD
+
+ - [[```8ed3adaa```](https://github.com/jina-ai/langchain-serve/commit/8ed3adaaa7f10442df1dc9de2e988230af38e2ab)] __-__ update test-push.yml (*Deepankar Mahapatro*)
+
+### 🍹 Other Improvements
+
+ - [[```619d8e61```](https://github.com/jina-ai/langchain-serve/commit/619d8e61d1ebce5033dab6156203cb4aaa3c37f8)] __-__ remove docarray imports (*Deepankar Mahapatro*)
+ - [[```eab0cca8```](https://github.com/jina-ai/langchain-serve/commit/eab0cca8cf45deea7513333051dcebaa9f79dd53)] __-__ __version__: the next version will be 0.0.41 (*Jina Dev Bot*)
+
+<a name=release-note-0-0-42></a>
+## Release Note (`0.0.42`)
+
+> Release time: 2023-06-05 05:59:53
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Deepankar Mahapatro,  Jina Dev Bot,  🙇
+
+
+### 🐞 Bug fixes
+
+ - [[```1d5bdde7```](https://github.com/jina-ai/langchain-serve/commit/1d5bdde76757d761451b1aafb80285f66c9f8d8c)] __-__ change cwd before running serving function (*Deepankar Mahapatro*)
+
+### 🍹 Other Improvements
+
+ - [[```a9bdb383```](https://github.com/jina-ai/langchain-serve/commit/a9bdb3830607b1531556e7feab58c80ff45a6b97)] __-__ __version__: the next version will be 0.0.42 (*Jina Dev Bot*)
+
+<a name=release-note-0-0-43></a>
+## Release Note (`0.0.43`)
+
+> Release time: 2023-06-06 14:26:11
+
+
+
+🙇 We'd like to thank all contributors for this new release! In particular,
+ Deepankar Mahapatro,  Jina Dev Bot,  🙇
+
+
+### 🆕 New Features
+
+ - [[```99df38a1```](https://github.com/jina-ai/langchain-serve/commit/99df38a1651f13736382d2bde7c93fd407d2c4ca)] __-__ export to docker-compose/kubernetes (*Deepankar Mahapatro*)
+
+### 🍹 Other Improvements
+
+ - [[```85cf9d9d```](https://github.com/jina-ai/langchain-serve/commit/85cf9d9dcf785baba0dd010f61e11131aa8780be)] __-__ __version__: the next version will be 0.0.43 (*Jina Dev Bot*)
 

@@ -7,6 +7,7 @@ from jcloud.constants import Phase
 from jina import Flow
 
 from . import __version__
+from .config import resolve_jcloud_config, validate_jcloud_config_callback
 from .flow import (
     APP_NAME,
     AUTOGPT_APP_NAME,
@@ -19,14 +20,14 @@ from .flow import (
     get_flow_dict,
     get_flow_yaml,
     get_module_dir,
+    get_uri,
     list_apps_on_jcloud,
     load_local_df,
     remove_app_on_jcloud,
     syncify,
     update_requirements,
-    get_uri,
+    ExportKind,
 )
-from .config import validate_jcloud_config_callback, resolve_jcloud_config
 
 
 def serve_locally(
@@ -63,10 +64,11 @@ async def serve_on_jcloud(
     cors: bool = True,
     env: str = None,
     verbose: bool = False,
+    public: bool = False,
     lcserve_app: bool = False,
 ) -> str:
-    from .flow import push_app_to_hubble
     from .backend.playground.utils.helper import get_random_tag
+    from .flow import push_app_to_hubble
 
     module_dir, is_websocket = get_module_dir(
         module_str=module_str,
@@ -86,6 +88,7 @@ async def serve_on_jcloud(
             version=version,
             platform=platform,
             verbose=verbose,
+            public=public,
         )
 
     app_id, _ = await deploy_app_on_jcloud(
@@ -122,6 +125,7 @@ async def serve_babyagi_on_jcloud(
     cors: bool = True,
     env: str = None,
     verbose: bool = False,
+    public: bool = False,
 ):
     requirements = requirements or []
     update_requirements(
@@ -143,6 +147,7 @@ async def serve_babyagi_on_jcloud(
         cors=cors,
         env=env,
         verbose=verbose,
+        public=public,
         lcserve_app=True,
     )
 
@@ -158,6 +163,7 @@ async def serve_autogpt_on_jcloud(
     cors: bool = True,
     env: str = None,
     verbose: bool = False,
+    public: bool = False,
 ):
     requirements = requirements or []
     update_requirements(
@@ -179,6 +185,7 @@ async def serve_autogpt_on_jcloud(
         env=env,
         cors=cors,
         verbose=verbose,
+        public=public,
         lcserve_app=True,
     )
 
@@ -194,6 +201,7 @@ async def serve_pdf_qna_on_jcloud(
     cors: bool = True,
     env: str = None,
     verbose: bool = False,
+    public: bool = False,
 ):
     await serve_on_jcloud(
         module_str='lcserve.apps.pdf_qna.app',
@@ -208,6 +216,7 @@ async def serve_pdf_qna_on_jcloud(
         cors=cors,
         env=env,
         verbose=verbose,
+        public=public,
         lcserve_app=True,
     )
 
@@ -223,6 +232,7 @@ async def serve_pandas_ai_on_jcloud(
     cors: bool = True,
     env: str = None,
     verbose: bool = False,
+    public: bool = False,
 ):
     await serve_on_jcloud(
         module_str='lcserve.apps.pandas_ai.api',
@@ -237,6 +247,7 @@ async def serve_pandas_ai_on_jcloud(
         cors=cors,
         env=env,
         verbose=verbose,
+        public=public,
         lcserve_app=True,
     )
 
@@ -261,6 +272,7 @@ _hubble_push_options = [
     click.option(
         '--image-tag',
         type=str,
+        default='latest',
         required=False,
         help='Tag of the image to be pushed.',
     ),
@@ -292,6 +304,13 @@ _hubble_push_options = [
         '--verbose',
         is_flag=True,
         help='Verbose mode.',
+        show_default=True,
+    ),
+    click.option(
+        '--public',
+        is_flag=True,
+        help='Push the image publicly.',
+        default=False,
         show_default=True,
     ),
 ]
@@ -362,6 +381,13 @@ _jcloud_shared_options = [
         help='Verbose mode.',
         show_default=True,
     ),
+    click.option(
+        '--public',
+        is_flag=True,
+        help='Push the image publicly.',
+        default=False,
+        show_default=True,
+    ),
 ]
 
 
@@ -414,6 +440,7 @@ def push(
     requirements,
     version,
     verbose,
+    public,
 ):
     from .flow import push_app_to_hubble
 
@@ -430,10 +457,103 @@ def push(
         requirements=requirements,
         version=version,
         verbose=verbose,
+        public=public,
     )
     id, tag = gateway_id.split(':')
     click.echo(
         f'Pushed to Hubble. Use {click.style(get_uri(id, tag), fg="green")} to deploy.'
+    )
+
+
+@serve.command(help='Export the app for self-hosted deployment.')
+@click.argument(
+    'module_str',
+    type=str,
+    required=False,
+)
+@click.option(
+    '--app',
+    type=str,
+    required=False,
+    help='FastAPI application to run, in the format "<module>:<attribute>"',
+)
+@click.option(
+    '--app-dir',
+    type=str,
+    required=False,
+    help='Base directory to be used for the FastAPI app.',
+)
+@click.option(
+    '--kind',
+    type=click.Choice([e.value for e in ExportKind]),
+    default=ExportKind.KUBERNETES.value,
+    help='Export to Kubernetes or Docker Compose.',
+    show_default=True,
+)
+@click.option(
+    '--path',
+    type=str,
+    default='.',
+    help='Path to the directory where the export should be saved.',
+    show_default=True,
+)
+@click.option(
+    '--name',
+    type=str,
+    default=APP_NAME,
+    help='Name of the app.',
+    show_default=True,
+)
+@click.option(
+    '--timeout',
+    type=int,
+    default=DEFAULT_TIMEOUT,
+    help='Total request timeout in seconds.',
+    show_default=True,
+)
+@click.option(
+    '--env',
+    type=click.Path(exists=True),
+    help='Path to the environment file',
+    show_default=False,
+)
+@hubble_push_options
+@click.help_option('-h', '--help')
+def export(
+    module_str,
+    app,
+    app_dir,
+    kind,
+    path,
+    name,
+    timeout,
+    env,
+    image_name,
+    image_tag,
+    platform,
+    requirements,
+    version,
+    verbose,
+    public,
+):
+    from .flow import export_app
+
+    export_app(
+        module_str=module_str,
+        fastapi_app_str=app,
+        app_dir=app_dir,
+        kind=kind,
+        path=path,
+        image_name=image_name,
+        tag=image_tag,
+        platform=platform,
+        requirements=requirements,
+        version=version,
+        verbose=verbose,
+        public=public,
+        name=name,
+        timeout=timeout,
+        env=env,
     )
 
 
@@ -521,6 +641,7 @@ async def jcloud(
     cors,
     env,
     verbose,
+    public,
 ):
     await serve_on_jcloud(
         module_str=module_str,
@@ -537,6 +658,7 @@ async def jcloud(
         env=env,
         cors=cors,
         verbose=verbose,
+        public=public,
     )
 
 
@@ -562,6 +684,7 @@ async def babyagi(
     cors,
     env,
     verbose,
+    public,
 ):
     await serve_babyagi_on_jcloud(
         name=name,
@@ -574,6 +697,7 @@ async def babyagi(
         cors=cors,
         env=env,
         verbose=verbose,
+        public=public,
     )
 
 
@@ -599,6 +723,7 @@ async def pdf_qna(
     cors,
     env,
     verbose,
+    public,
 ):
     await serve_pdf_qna_on_jcloud(
         name=name,
@@ -611,6 +736,7 @@ async def pdf_qna(
         cors=cors,
         env=env,
         verbose=verbose,
+        public=public,
     )
 
 
@@ -636,6 +762,7 @@ async def autogpt(
     cors,
     env,
     verbose,
+    public,
 ):
     await serve_autogpt_on_jcloud(
         name=name,
@@ -648,6 +775,7 @@ async def autogpt(
         cors=cors,
         env=env,
         verbose=verbose,
+        public=public,
     )
 
 
@@ -673,6 +801,7 @@ async def pandas_ai(
     cors,
     env,
     verbose,
+    public,
 ):
     await serve_pandas_ai_on_jcloud(
         name=name,
@@ -685,6 +814,7 @@ async def pandas_ai(
         cors=cors,
         env=env,
         verbose=verbose,
+        public=public,
     )
 
 

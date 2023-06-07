@@ -12,7 +12,7 @@
 
 [Jina](https://github.com/jina-ai/jina) is an open-source framework for building scalable multi modal AI apps on Production. [LangChain](https://python.langchain.com/en/latest/index.html) is another open-source framework for building applications powered by LLMs.
 
-**langchain-serve** helps you deploy your LangChain apps on Jina AI Cloud in just a matter of seconds. You can now benefit from the scalability and serverless architecture of the cloud without sacrificing the ease and convenience of local development.
+**langchain-serve** helps you deploy your LangChain apps on Jina AI Cloud in just a matter of seconds. You can now benefit from the scalability and serverless architecture of the cloud without sacrificing the ease and convenience of local development. OR you can also deploy your LangChain apps on your own infrastructure making sure your data remains private.
 
 > Give us a :star: and tell us what more you'd like to see! 
 
@@ -204,8 +204,12 @@ langchain-serve currently wraps following apps as a service to be deployed on Ji
   - 🤖 No need to change your code to manage APIs, or manage dockerfiles, or worry about infrastructure!
 
 
-If you have any feature requests or faced any issue, please [let us know](https://github.com/jina-ai/langchain-serve/issues/new)!
+### 🏠 Self-host LLM Apps with Docker Compose or Kubernetes
 
+  - 🚀 Export your apps as Kubernetes or Docker Compose YAMLs with single command.
+  - 👉 `lc-serve export app --kind <kubernetes/docker-compose> --path .`
+  - 📦 Deploy your app on your own internal infrastructure with your own security policies.
+  - 📞 [Talk to us if you need all the features of Jina AI Cloud on your own infrastructure.](#-reach-out-to-us)
 
 # 🧰 Usage
 
@@ -675,6 +679,8 @@ lc-serve deploy jcloud --app endpoints:app
 | Description | Command | 
 | --- | ---: |
 | Deploy your app locally | `lc-serve deploy local app` |
+| Export your app as Kubernetes YAML | `lc-serve export app --kind kubernetes --path .` |
+| Export your app as Docker Compose YAML | `lc-serve export app --kind docker-compose --path .` |
 | Deploy your app on JCloud | `lc-serve deploy jcloud app` |
 | Deploy FastAPI app on JCloud | `lc-serve deploy jcloud --app <app-name>:<app-object>` |
 | Update existing app on JCloud | `lc-serve deploy jcloud app --app-id <app-id>` |
@@ -774,11 +780,17 @@ Total credits per hour = 10.104 + 3.33 = 13.434
 
 # ❓ Frequently Asked Questions
 
+- [`lc-serve` command not found](#lc-serve-command-not-found)
 - [My client that connects to the JCloud hosted App gets timed-out, what should I do?](#my-client-that-connects-to-the-jcloud-hosted-app-gets-timed-out-what-should-I-do)
 - [How to pass environment variables to the app?](#how-to-pass-environment-variables-to-the-app)
 - [JCloud deployment failed at pushing image to Jina Hubble, what should I do?](#jcloud-deployment-failed-at-pushing-image-to-jina-hubble-what-should-i-di)
 - [Debug babyagi playground request/response for external integration](#debug-babyagi-playground-requestresponse-for-external-integration)
 
+### `lc-serve` command not found
+
+`lc-serve` command is registered during `langchain-serve` installation. If you get `command not found: lc-serve` error, please replace `lc-serve` command with `python -m lcserve` & retry.
+  
+  
 ### My client that connects to the JCloud hosted App gets timed-out, what should I do?
 
 If you make long HTTP/ WebSocket requests, the default timeout value (2 minutes) might not be suitable for your use case. You can provide a custom timeout value during JCloud deployment by using the `--timeout` argument.
@@ -822,10 +834,15 @@ Please use `--verbose` and retry to get more information. If you are operating o
     lc-serve playground babyagi --verbose
     ```
 
-# 📞 Reach out to us
+# 📣 Reach out to us
 
-- Serverless is not your thing?
-- Do you want larger instances for your API?
-- Looking for file uploads, or other data-in, data-out features?
+Want to deploy your LLM apps on your own infrastructure with all capabilities of Jina AI Cloud? 
 
-📣 Got your attention? [Join us on Discord](https://discord.jina.ai) and we'd be happy to help you out.
+  - Serverless
+  - Autoscaling
+  - TLS certs
+  - Persistent storage
+  - End to end LLM observability
+  - and more on auto-pilot!
+
+[Join us on Discord](https://discord.jina.ai) and we'd be happy to hear more about your use case.
